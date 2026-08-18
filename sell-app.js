@@ -1,10 +1,10 @@
 import { auth, db, storage } from './firebase.js';
+import { prepareListingPhotos } from './image-utils.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js';
 import { collection, doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-storage.js';
 
 const MAX_PHOTOS = 8;
-const MAX_BYTES = 5 * 1024 * 1024;
 let currentUser = null;
 
 onAuthStateChanged(auth, user => {
@@ -24,13 +24,7 @@ photosInput?.addEventListener('change', () => {
     status.textContent = `Please choose no more than ${MAX_PHOTOS} photos.`;
     return;
   }
-  const bad = files.find(f => !f.type.startsWith('image/') || f.size >= MAX_BYTES);
-  if (bad) {
-    photosInput.value = '';
-    status.textContent = 'Each photo must be an image smaller than 5 MB.';
-    return;
-  }
-  if (files.length) status.textContent = `${files.length} photo${files.length === 1 ? '' : 's'} ready to upload.`;
+  if (files.length) status.textContent = `${files.length} photo${files.length === 1 ? '' : 's'} selected. Large phone photos will be resized automatically when you publish.`;
 });
 
 document.getElementById('publish-listing')?.addEventListener('click', async () => {
@@ -43,19 +37,18 @@ document.getElementById('publish-listing')?.addEventListener('click', async () =
   const description = document.getElementById('description').value.trim();
   const price = Number(document.getElementById('price').value);
   const certified = document.getElementById('seller-certification').checked;
-  const files = [...(photosInput?.files || [])];
+  const selectedFiles = [...(photosInput?.files || [])];
 
   if (!title || !category || !condition || !description || !price) {
     status.textContent = 'Please complete title, category, condition, description, and price.'; return;
   }
   if (!certified) { status.textContent = 'Please confirm the seller certification before publishing.'; return; }
-  if (!files.length) { status.textContent = 'Please add at least one real photo of the item.'; return; }
-  if (files.length > MAX_PHOTOS) { status.textContent = `Please choose no more than ${MAX_PHOTOS} photos.`; return; }
-  if (files.some(f => !f.type.startsWith('image/') || f.size >= MAX_BYTES)) {
-    status.textContent = 'Each photo must be an image smaller than 5 MB.'; return;
-  }
+  if (!selectedFiles.length) { status.textContent = 'Please add at least one real photo of the item.'; return; }
+  if (selectedFiles.length > MAX_PHOTOS) { status.textContent = `Please choose no more than ${MAX_PHOTOS} photos.`; return; }
 
   try {
+    status.textContent = 'Preparing photos…';
+    const files = await prepareListingPhotos(selectedFiles);
     const listingRef = doc(collection(db, 'listings'));
     const imageUrls = [];
     const imagePaths = [];
@@ -63,10 +56,10 @@ document.getElementById('publish-listing')?.addEventListener('click', async () =
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const safeName = (file.name || `photo-${i}.jpg`).replace(/[^a-zA-Z0-9._-]/g, '_');
       const path = `listing-images/${currentUser.uid}/${listingRef.id}/${Date.now()}-${i}-${safeName}`;
       const storageRef = ref(storage, path);
-      await uploadBytes(storageRef, file, { contentType: file.type });
+      await uploadBytes(storageRef, file, { contentType: file.type || 'image/jpeg' });
       imageUrls.push(await getDownloadURL(storageRef));
       imagePaths.push(path);
       status.textContent = `Uploaded ${i + 1} of ${files.length} photos…`;
@@ -104,6 +97,8 @@ document.getElementById('publish-listing')?.addEventListener('click', async () =
 });
 
 function friendlyStorageError(e) {
+  if (e?.message === 'too-large') return 'that photo is unusually large and could not be resized. Try choosing a screenshot or a different copy of the photo.';
+  if (e?.message === 'not-image') return 'one of the selected files is not an image.';
   const code = e?.code || '';
   if (code.includes('unauthorized')) return 'Firebase Storage did not allow the upload. Please make sure you are signed in and the Storage rules are published.';
   if (code.includes('quota')) return 'Storage quota was reached.';
