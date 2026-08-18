@@ -16,10 +16,11 @@ if(target){
         const card=document.createElement('article');
         card.className='listing-card';
         const photo=x.imageUrl || (Array.isArray(x.imageUrls) ? x.imageUrls[0] : '');
+        const href=`listing.html?id=${encodeURIComponent(x.id)}`;
         const imageHtml=photo
           ? `<img src="${escAttr(photo)}" alt="${escAttr(x.title || 'Used pet gear listing')}" loading="lazy">`
           : '<div class="category-fallback">🐾</div>';
-        card.innerHTML=`<div class="listing-image-wrap">${imageHtml}</div><div class="listing-body"><div class="seller-row"><span class="community">COMMUNITY SELLER</span></div><h3>${esc(x.title)}</h3><p class="listing-meta">${esc(x.condition||'Used')} · ${x.shipping?'Shipping ':''}${x.pickup?'Local Pickup':''}</p><div class="price-row"><strong>$${Number(x.price||0).toFixed(0)}</strong>${x.acceptOffers?'<button disabled>Make Offer</button>':''}</div><p>${esc(x.description||'')}</p></div>`;
+        card.innerHTML=`<a class="listing-card-link" href="${href}" aria-label="View ${escAttr(x.title||'listing')}"><div class="listing-image-wrap">${imageHtml}</div><div class="listing-body"><div class="seller-row"><span class="community">COMMUNITY SELLER</span></div><h3>${esc(x.title)}</h3><p class="listing-meta">${esc(x.condition||'Used')} · ${x.shipping?'Shipping ':''}${x.pickup?'Local Pickup':''}</p><div class="price-row"><strong>$${Number(x.price||0).toFixed(0)}</strong>${x.acceptOffers?'<span class="offer-note">Offers welcome</span>':''}</div><p>${esc(x.description||'')}</p></div></a>`;
         target.appendChild(card);
       });
     }
@@ -28,5 +29,5 @@ if(target){
     target.innerHTML='<p class="marketplace-note"><strong>Live listings are not readable yet.</strong><span>Refresh in a moment or check the Firestore rules.</span></p>';
   }
 }
-function esc(s){return String(s ?? '').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function esc(s){return String(s ?? '').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));}
 function escAttr(s){return esc(s).replace(/`/g,'&#96;');}
