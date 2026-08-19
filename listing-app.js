@@ -4,88 +4,24 @@ import { collection, addDoc, doc, getDoc, setDoc, deleteDoc, serverTimestamp } f
 
 const target=document.getElementById('listing-detail');
 const id=new URLSearchParams(location.search).get('id');
-let currentUser=null;
-let listing=null;
-let saved=false;
-let offerOpen=false;
+let currentUser=null,listing=null,saved=false,offerOpen=false,messageOpen=false;
 
-onAuthStateChanged(auth,async user=>{
-  currentUser=user;
-  saved=false;
-  if(user&&id){
-    try{saved=(await getDoc(doc(db,'favorites',`${user.uid}_${id}`))).exists();}catch(e){console.warn('Could not check favorite state',e);}
-  }
-  render();
-});
+onAuthStateChanged(auth,async user=>{currentUser=user;saved=false;if(user&&id){try{saved=(await getDoc(doc(db,'favorites',`${user.uid}_${id}`))).exists();}catch(e){console.warn(e);}}render();});
+if(!id)target.innerHTML='<div class="listing-error"><h1>Listing not found</h1><a class="btn btn-teal" href="shop.html">Back to Shop</a></div>';
+else{try{const snap=await getDoc(doc(db,'listings',id));if(!snap.exists())target.innerHTML='<div class="listing-error"><h1>Listing not found</h1><p>This item may have been removed.</p></div>';else{listing={id:snap.id,...snap.data()};render();}}catch(e){console.error(e);target.innerHTML='<div class="listing-error"><h1>We could not load this listing.</h1></div>';}}
 
-if(!id){
-  target.innerHTML='<div class="listing-error"><h1>Listing not found</h1><p>This listing link is missing an item ID.</p><a class="btn btn-teal" href="shop.html">Back to Shop</a></div>';
-}else{
-  try{
-    const snap=await getDoc(doc(db,'listings',id));
-    if(!snap.exists()) target.innerHTML='<div class="listing-error"><h1>Listing not found</h1><p>This item may have been removed.</p><a class="btn btn-teal" href="shop.html">Back to Shop</a></div>';
-    else{listing={id:snap.id,...snap.data()};render();}
-  }catch(e){console.error(e);target.innerHTML='<div class="listing-error"><h1>We could not load this listing.</h1><p>Please try again in a moment.</p><a class="btn btn-teal" href="shop.html">Back to Shop</a></div>';}
-}
-
-function render(){
-  if(!listing)return;
-  const x=listing;
-  const urls=Array.isArray(x.imageUrls)&&x.imageUrls.length?x.imageUrls:(x.imageUrl?[x.imageUrl]:[]);
-  const gallery=urls.length?`<div class="detail-main-photo"><img id="detail-main-image" src="${escAttr(urls[0])}" alt="${escAttr(x.title||'Listing photo')}"></div>${urls.length>1?`<div class="detail-thumbs">${urls.map((u,i)=>`<button class="thumb ${i===0?'active':''}" data-src="${escAttr(u)}" aria-label="View photo ${i+1}"><img src="${escAttr(u)}" alt="Thumbnail ${i+1}"></button>`).join('')}</div>`:''}`:'<div class="detail-main-photo fallback">🐾</div>';
-  const delivery=[];if(x.shipping)delivery.push('Shipping available');if(x.pickup)delivery.push(`Local pickup${x.pickupArea?` near ${esc(x.pickupArea)}`:''}`);
-  const isOwner=currentUser&&currentUser.uid===x.sellerId;
-  const canOffer=x.acceptOffers&&x.status==='active'&&!isOwner;
-  const offerArea=canOffer
-    ? `<button id="make-offer" class="btn btn-yellow" type="button">Make Offer</button>`
-    : `<button class="btn btn-yellow" disabled>${isOwner?'Your Listing':x.acceptOffers?'Offers unavailable':'Seller is not accepting offers'}</button>`;
-  const offerForm=offerOpen&&canOffer?`<div class="offer-form"><label>Your offer amount<div class="offer-input"><span>$</span><input id="offer-amount" type="number" min="1" step="0.01" inputmode="decimal" placeholder="${Math.max(1,Math.floor(Number(x.price||0)*0.85))}"></div></label><p>Asking price: <strong>$${Number(x.price||0).toFixed(2)}</strong></p><div class="offer-form-actions"><button id="submit-offer" class="btn btn-teal" type="button">Send Offer</button><button id="cancel-offer" class="btn btn-ghost" type="button">Cancel</button></div><p id="offer-status" class="offer-status"></p></div>`:'';
-  target.innerHTML=`<a class="back-link" href="shop.html#listings">← Back to marketplace</a><div class="detail-grid"><section class="detail-gallery">${gallery}</section><section class="detail-info"><div class="detail-top-row"><div><span class="seller-badge">${x.sellerType==='verified'?'PAWS IT ON VERIFIED':'COMMUNITY SELLER'}</span><span class="status-badge ${escAttr(x.status||'active')}">${esc((x.status||'active').toUpperCase())}</span></div><button id="detail-favorite" class="detail-favorite ${saved?'saved':''}" type="button">${saved?'♥ Saved':'♡ Save Item'}</button></div><h1>${esc(x.title||'Untitled listing')}</h1><div class="detail-price">$${Number(x.price||0).toFixed(2)}</div>${x.acceptOffers?'<div class="offer-welcome">Seller is open to offers.</div>':''}<div class="detail-facts">${fact('Condition',x.condition)}${fact('Category',x.category)}${fact('Brand',x.brand)}${fact('Size',x.size)}${fact('Color',x.color)}</div><div class="detail-section"><h2>About this item</h2><p>${esc(x.description||'')}</p></div><div class="detail-section"><h2>Delivery</h2><p>${delivery.length?delivery.join(' · '):'Delivery details have not been set yet.'}</p></div><div class="detail-section seller-box"><h2>Seller</h2><p>${x.sellerType==='verified'?'Sold directly by Paws It On.':'Listed by a Paws It On community seller.'}</p></div><div class="future-actions">${offerArea}<button class="btn btn-teal" disabled>Buy Now — Coming Soon</button></div>${offerForm}</section></div>`;
-  document.querySelectorAll('.thumb').forEach(btn=>btn.addEventListener('click',()=>{const main=document.getElementById('detail-main-image');if(main)main.src=btn.dataset.src;document.querySelectorAll('.thumb').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}));
-  document.getElementById('detail-favorite')?.addEventListener('click',toggleFavorite);
-  document.getElementById('make-offer')?.addEventListener('click',()=>{if(!currentUser){if(confirm('Sign in to make an offer. Go to sign in now?'))location.href=`account.html?next=${encodeURIComponent(location.pathname+location.search)}`;return;}offerOpen=true;render();setTimeout(()=>document.getElementById('offer-amount')?.focus(),0);});
-  document.getElementById('cancel-offer')?.addEventListener('click',()=>{offerOpen=false;render();});
-  document.getElementById('submit-offer')?.addEventListener('click',submitOffer);
-}
-
-async function submitOffer(){
-  const statusEl=document.getElementById('offer-status');
-  if(!currentUser||!listing)return;
-  const amount=Number(document.getElementById('offer-amount')?.value);
-  if(!amount||amount<=0){statusEl.textContent='Enter a valid offer amount.';return;}
-  if(amount>=Number(listing.price||0)){statusEl.textContent='For the full asking price, Buy Now will be available when checkout launches. Enter an offer below the asking price.';return;}
-  try{
-    statusEl.textContent='Sending offer…';
-    await addDoc(collection(db,'offers'),{
-      listingId:listing.id,
-      listingTitle:listing.title||'',
-      listingImage:listing.imageUrl||(Array.isArray(listing.imageUrls)?listing.imageUrls[0]:'')||'',
-      askingPrice:Number(listing.price||0),
-      buyerId:currentUser.uid,
-      buyerEmail:currentUser.email||'',
-      sellerId:listing.sellerId,
-      sellerEmail:listing.sellerEmail||'',
-      amount,
-      counterAmount:null,
-      status:'pending',
-      createdAt:serverTimestamp(),
-      updatedAt:serverTimestamp()
-    });
-    statusEl.textContent='Offer sent! You can track it under My Paws It On → My Offers.';
-    document.getElementById('submit-offer').disabled=true;
-  }catch(e){
-    console.error(e);
-    statusEl.textContent='Firebase blocked the offer. We need to add the new Offers security rule.';
-  }
-}
-
-async function toggleFavorite(){
-  if(!currentUser){if(confirm('Sign in to save this item to My Paws It On. Go to sign in now?'))location.href=`account.html?next=${encodeURIComponent(location.pathname+location.search)}`;return;}
-  const ref=doc(db,'favorites',`${currentUser.uid}_${id}`);
-  try{if(saved){await deleteDoc(ref);saved=false;}else{await setDoc(ref,{userId:currentUser.uid,listingId:id,createdAt:serverTimestamp()});saved=true;}render();}
-  catch(e){console.error(e);alert('We could not save that item yet.');}
-}
-
-function fact(label,value){return value?`<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`:'';}
-function esc(s){return String(s??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));}
-function escAttr(s){return esc(s).replace(/`/g,'&#96;');}
+function render(){if(!listing)return;const x=listing,urls=Array.isArray(x.imageUrls)&&x.imageUrls.length?x.imageUrls:(x.imageUrl?[x.imageUrl]:[]),isOwner=currentUser&&currentUser.uid===x.sellerId,canOffer=x.acceptOffers&&x.status==='active'&&!isOwner;
+const gallery=urls.length?`<div class="detail-main-photo"><img id="detail-main-image" src="${escAttr(urls[0])}" alt="${escAttr(x.title||'Listing photo')}"></div>${urls.length>1?`<div class="detail-thumbs">${urls.map((u,i)=>`<button class="thumb ${i===0?'active':''}" data-src="${escAttr(u)}"><img src="${escAttr(u)}" alt="Thumbnail ${i+1}"></button>`).join('')}</div>`:''}`:'<div class="detail-main-photo fallback">🐾</div>';
+const delivery=[];if(x.shipping)delivery.push('Shipping available');if(x.pickup)delivery.push(`Local pickup${x.pickupArea?` near ${esc(x.pickupArea)}`:''}`);
+const offerArea=canOffer?'<button id="make-offer" class="btn btn-yellow" type="button">Make Offer</button>':`<button class="btn btn-yellow" disabled>${isOwner?'Your Listing':x.acceptOffers?'Offers unavailable':'Seller is not accepting offers'}</button>`;
+const offerForm=offerOpen&&canOffer?`<div class="offer-form"><label>Your offer amount<div class="offer-input"><span>$</span><input id="offer-amount" type="number" min="1" step="0.01" inputmode="decimal"></div></label><p>Asking price: <strong>$${Number(x.price||0).toFixed(2)}</strong></p><div class="offer-form-actions"><button id="submit-offer" class="btn btn-teal">Send Offer</button><button id="cancel-offer" class="btn btn-ghost">Cancel</button></div><p id="offer-status" class="offer-status"></p></div>`:'';
+const messageArea=!isOwner?'<button id="message-seller" class="btn btn-teal" type="button">Message Seller</button>':'<button class="btn btn-teal" disabled>Your Listing</button>';
+const messageForm=messageOpen&&!isOwner?`<div class="offer-form message-form"><label>Message seller<textarea id="message-text" rows="4" maxlength="1000" placeholder="Ask about size, condition, shipping, pickup, or anything else about this item."></textarea></label><p class="listing-meta">Your email address is not shown to the seller.</p><div class="offer-form-actions"><button id="send-message" class="btn btn-teal">Send Message</button><button id="cancel-message" class="btn btn-ghost">Cancel</button></div><p id="message-status" class="offer-status"></p></div>`:'';
+target.innerHTML=`<a class="back-link" href="shop.html#listings">← Back to marketplace</a><div class="detail-grid"><section class="detail-gallery">${gallery}</section><section class="detail-info"><div class="detail-top-row"><div><span class="seller-badge">${x.sellerType==='verified'?'PAWS IT ON VERIFIED':'COMMUNITY SELLER'}</span><span class="status-badge ${escAttr(x.status||'active')}">${esc((x.status||'active').toUpperCase())}</span></div><button id="detail-favorite" class="detail-favorite ${saved?'saved':''}">${saved?'♥ Saved':'♡ Save Item'}</button></div><h1>${esc(x.title||'Untitled listing')}</h1><div class="detail-price">$${Number(x.price||0).toFixed(2)}</div>${x.acceptOffers?'<div class="offer-welcome">Seller is open to offers.</div>':''}<div class="detail-facts">${fact('Condition',x.condition)}${fact('Category',x.category)}${fact('Brand',x.brand)}${fact('Size',x.size)}${fact('Color',x.color)}</div><div class="detail-section"><h2>About this item</h2><p>${esc(x.description||'')}</p></div><div class="detail-section"><h2>Delivery</h2><p>${delivery.length?delivery.join(' · '):'Delivery details have not been set yet.'}</p></div><div class="detail-section seller-box"><h2>Seller</h2><p>${x.sellerType==='verified'?'Sold directly by Paws It On.':'Listed by a Paws It On community seller.'}</p></div><div class="future-actions">${offerArea}${messageArea}</div>${offerForm}${messageForm}</section></div>`;
+document.querySelectorAll('.thumb').forEach(btn=>btn.onclick=()=>{document.getElementById('detail-main-image').src=btn.dataset.src;document.querySelectorAll('.thumb').forEach(b=>b.classList.remove('active'));btn.classList.add('active');});
+document.getElementById('detail-favorite')?.addEventListener('click',toggleFavorite);document.getElementById('make-offer')?.addEventListener('click',()=>requireSignIn(()=>{offerOpen=true;messageOpen=false;render();}));document.getElementById('cancel-offer')?.addEventListener('click',()=>{offerOpen=false;render();});document.getElementById('submit-offer')?.addEventListener('click',submitOffer);document.getElementById('message-seller')?.addEventListener('click',()=>requireSignIn(()=>{messageOpen=true;offerOpen=false;render();setTimeout(()=>document.getElementById('message-text')?.focus(),0);}));document.getElementById('cancel-message')?.addEventListener('click',()=>{messageOpen=false;render();});document.getElementById('send-message')?.addEventListener('click',sendMessage);}
+function requireSignIn(fn){if(currentUser){fn();return;}if(confirm('Sign in to contact this seller. Go to sign in now?'))location.href=`account.html?next=${encodeURIComponent(location.pathname+location.search)}`;}
+async function sendMessage(){const el=document.getElementById('message-status'),text=document.getElementById('message-text')?.value.trim();if(!text){el.textContent='Write a message first.';return;}try{el.textContent='Sending…';const conversationId=`${id}_${currentUser.uid}_${listing.sellerId}`,convRef=doc(db,'conversations',conversationId),snap=await getDoc(convRef);if(!snap.exists())await setDoc(convRef,{listingId:id,listingTitle:listing.title||'',listingImage:listing.imageUrl||(Array.isArray(listing.imageUrls)?listing.imageUrls[0]:'')||'',buyerId:currentUser.uid,sellerId:listing.sellerId,participants:[currentUser.uid,listing.sellerId],createdAt:serverTimestamp(),updatedAt:serverTimestamp()});else await setDoc(convRef,{updatedAt:serverTimestamp()},{merge:true});await addDoc(collection(db,'conversations',conversationId,'messages'),{senderId:currentUser.uid,text,createdAt:serverTimestamp()});el.textContent='Message sent! Continue the conversation in My Paws It On → Messages.';document.getElementById('send-message').disabled=true;}catch(e){console.error(e);el.textContent='Firebase blocked messaging. We need to add the Messages security rules.';}}
+async function submitOffer(){const el=document.getElementById('offer-status'),amount=Number(document.getElementById('offer-amount')?.value);if(!amount||amount<=0){el.textContent='Enter a valid offer amount.';return;}if(amount>=Number(listing.price||0)){el.textContent='Enter an offer below the asking price.';return;}try{el.textContent='Sending offer…';await addDoc(collection(db,'offers'),{listingId:listing.id,listingTitle:listing.title||'',listingImage:listing.imageUrl||(Array.isArray(listing.imageUrls)?listing.imageUrls[0]:'')||'',askingPrice:Number(listing.price||0),buyerId:currentUser.uid,sellerId:listing.sellerId,amount,counterAmount:null,status:'pending',createdAt:serverTimestamp(),updatedAt:serverTimestamp()});el.textContent='Offer sent! Track it under My Paws It On → My Offers.';document.getElementById('submit-offer').disabled=true;}catch(e){console.error(e);el.textContent='That offer could not be sent.';}}
+async function toggleFavorite(){if(!currentUser){requireSignIn(()=>{});return;}const r=doc(db,'favorites',`${currentUser.uid}_${id}`);try{if(saved){await deleteDoc(r);saved=false;}else{await setDoc(r,{userId:currentUser.uid,listingId:id,createdAt:serverTimestamp()});saved=true;}render();}catch(e){console.error(e);alert('We could not save that item yet.');}}
+function fact(l,v){return v?`<div><span>${esc(l)}</span><strong>${esc(v)}</strong></div>`:'';}function esc(s){return String(s??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));}function escAttr(s){return esc(s).replace(/`/g,'&#96;');}
