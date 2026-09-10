@@ -10,9 +10,21 @@ onAuthStateChanged(auth,async user=>{currentUser=user;saved=false;if(user&&id){t
 if(!id)target.innerHTML='<div class="listing-error"><h1>Listing not found</h1><a class="btn btn-teal" href="shop.html">Back to Shop</a></div>';
 else{try{const snap=await getDoc(doc(db,'listings',id));if(!snap.exists())target.innerHTML='<div class="listing-error"><h1>Listing not found</h1><p>This item may have been removed.</p></div>';else{listing={id:snap.id,...snap.data()};render();}}catch(e){console.error(e);target.innerHTML='<div class="listing-error"><h1>We could not load this listing.</h1></div>';}}
 
+function deliveryText(x){
+  const delivery=[];
+  if(x.shipping){
+    if(x.shippingType==='free') delivery.push('📦 Free shipping');
+    else if(x.shippingType==='flat') delivery.push(`📦 $${Number(x.flatShippingPrice||0).toFixed(2)} flat-rate shipping`);
+    else if(x.shippingType==='calculated') delivery.push('📦 Shipping calculated at checkout');
+    else delivery.push('📦 Shipping available');
+  }
+  if(x.pickup) delivery.push(`📍 Local pickup${x.pickupArea?` near ${esc(x.pickupArea)}`:''}`);
+  return delivery;
+}
+
 function render(){if(!listing)return;const x=listing,urls=Array.isArray(x.imageUrls)&&x.imageUrls.length?x.imageUrls:(x.imageUrl?[x.imageUrl]:[]),isOwner=currentUser&&currentUser.uid===x.sellerId,canOffer=x.acceptOffers&&x.status==='active'&&!isOwner;
 const gallery=urls.length?`<div class="detail-main-photo"><img id="detail-main-image" src="${escAttr(urls[0])}" alt="${escAttr(x.title||'Listing photo')}"></div>${urls.length>1?`<div class="detail-thumbs">${urls.map((u,i)=>`<button class="thumb ${i===0?'active':''}" data-src="${escAttr(u)}"><img src="${escAttr(u)}" alt="Thumbnail ${i+1}"></button>`).join('')}</div>`:''}`:'<div class="detail-main-photo fallback">🐾</div>';
-const delivery=[];if(x.shipping)delivery.push('Shipping available');if(x.pickup)delivery.push(`Local pickup${x.pickupArea?` near ${esc(x.pickupArea)}`:''}`);
+const delivery=deliveryText(x);
 const offerArea=canOffer?'<button id="make-offer" class="btn btn-yellow" type="button">Make Offer</button>':`<button class="btn btn-yellow" disabled>${isOwner?'Your Listing':x.acceptOffers?'Offers unavailable':'Seller is not accepting offers'}</button>`;
 const offerForm=offerOpen&&canOffer?`<div class="offer-form"><label>Your offer amount<div class="offer-input"><span>$</span><input id="offer-amount" type="number" min="1" step="0.01" inputmode="decimal"></div></label><p>Asking price: <strong>$${Number(x.price||0).toFixed(2)}</strong></p><div class="offer-form-actions"><button id="submit-offer" class="btn btn-teal">Send Offer</button><button id="cancel-offer" class="btn btn-ghost">Cancel</button></div><p id="offer-status" class="offer-status"></p></div>`:'';
 const messageArea=!isOwner?'<button id="message-seller" class="btn btn-teal" type="button">Message Seller</button>':'<button class="btn btn-teal" disabled>Your Listing</button>';
