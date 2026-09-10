@@ -16,6 +16,23 @@ onAuthStateChanged(auth, user => {
 });
 
 const photosInput = document.getElementById('photos');
+const shippingInput = document.getElementById('shipping');
+const shippingOptions = document.getElementById('shipping-options');
+const shippingType = document.getElementById('shipping-type');
+const flatWrap = document.getElementById('flat-shipping-wrap');
+const calculatedWrap = document.getElementById('calculated-shipping-wrap');
+
+function refreshShippingFields(){
+  const enabled = !!shippingInput?.checked;
+  if (shippingOptions) shippingOptions.hidden = !enabled;
+  const type = enabled ? shippingType?.value : '';
+  if (flatWrap) flatWrap.hidden = type !== 'flat';
+  if (calculatedWrap) calculatedWrap.hidden = type !== 'calculated';
+}
+shippingInput?.addEventListener('change', refreshShippingFields);
+shippingType?.addEventListener('change', refreshShippingFields);
+refreshShippingFields();
+
 photosInput?.addEventListener('change', () => {
   const status = document.getElementById('listing-status');
   const files = [...photosInput.files];
@@ -38,10 +55,22 @@ document.getElementById('publish-listing')?.addEventListener('click', async () =
   const price = Number(document.getElementById('price').value);
   const certified = document.getElementById('seller-certification').checked;
   const selectedFiles = [...(photosInput?.files || [])];
+  const shipping = !!shippingInput?.checked;
+  const pickup = document.getElementById('pickup').checked;
+  const shipType = shipping ? shippingType?.value || '' : '';
+  const flatShippingPrice = shipType === 'flat' ? Number(document.getElementById('flat-shipping-price').value) : null;
+  const packageWeight = shipType === 'calculated' ? Number(document.getElementById('package-weight').value) : null;
+  const packageLength = shipType === 'calculated' ? Number(document.getElementById('package-length').value) : null;
+  const packageWidth = shipType === 'calculated' ? Number(document.getElementById('package-width').value) : null;
+  const packageHeight = shipType === 'calculated' ? Number(document.getElementById('package-height').value) : null;
 
   if (!title || !category || !condition || !description || !price) {
     status.textContent = 'Please complete title, category, condition, description, and price.'; return;
   }
+  if (!shipping && !pickup) { status.textContent = 'Please choose shipping, local pickup, or both.'; return; }
+  if (shipping && !shipType) { status.textContent = 'Please choose calculated, flat-rate, or free shipping.'; return; }
+  if (shipType === 'flat' && (!Number.isFinite(flatShippingPrice) || flatShippingPrice < 0)) { status.textContent = 'Please enter a valid flat shipping charge.'; return; }
+  if (shipType === 'calculated' && (![packageWeight, packageLength, packageWidth, packageHeight].every(v => Number.isFinite(v) && v > 0))) { status.textContent = 'For calculated shipping, please enter package weight, length, width, and height.'; return; }
   if (!certified) { status.textContent = 'Please confirm the seller certification before publishing.'; return; }
   if (!selectedFiles.length) { status.textContent = 'Please add at least one real photo of the item.'; return; }
   if (selectedFiles.length > MAX_PHOTOS) { status.textContent = `Please choose no more than ${MAX_PHOTOS} photos.`; return; }
@@ -76,8 +105,14 @@ document.getElementById('publish-listing')?.addEventListener('click', async () =
       color: document.getElementById('color').value.trim(),
       condition, description, price,
       acceptOffers: document.getElementById('accept-offers').checked,
-      shipping: document.getElementById('shipping').checked,
-      pickup: document.getElementById('pickup').checked,
+      shipping,
+      shippingType: shipType,
+      flatShippingPrice: shipType === 'flat' ? flatShippingPrice : null,
+      packageWeight: shipType === 'calculated' ? packageWeight : null,
+      packageLength: shipType === 'calculated' ? packageLength : null,
+      packageWidth: shipType === 'calculated' ? packageWidth : null,
+      packageHeight: shipType === 'calculated' ? packageHeight : null,
+      pickup,
       pickupArea: document.getElementById('pickup-area').value.trim(),
       sellerCertified: true,
       sellerCertifiedAt: serverTimestamp(),
@@ -105,4 +140,4 @@ function friendlyStorageError(e) {
   if (code.includes('canceled')) return 'Upload was canceled.';
   return 'please try again. If it keeps happening, we will check Firebase together.';
 }
-function escapeHtml(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function escapeHtml(s){return String(s).replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
