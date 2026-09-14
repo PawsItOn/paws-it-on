@@ -5,7 +5,33 @@ const params=new URLSearchParams(location.search),offerId=params.get('offer');
 const form=document.getElementById('shipping-form'),status=document.getElementById('checkout-status'),button=document.getElementById('continue-btn'),paymentBox=document.getElementById('payment-test'),paymentBtn=document.getElementById('test-payment-btn'),paymentStatus=document.getElementById('payment-status');
 let currentOffer=null;
 const money=n=>`$${Number(n||0).toFixed(2)}`;
+
+function shippingSummary(o){
+  const type=o?.shippingType||'';
+  if(type==='free') return {label:'Free shipping',amount:0,display:'$0.00',ready:true,note:'The seller is covering the shipping cost.'};
+  if(type==='flat'){
+    const amount=Number(o.flatShippingPrice||0);
+    return {label:'Flat-rate shipping',amount,display:money(amount),ready:true,note:'The seller set a flat shipping charge for this item.'};
+  }
+  if(type==='calculated') return {label:'Calculated shipping',amount:0,display:'Calculated after address',ready:false,note:'A live carrier rate will be calculated from your address before real payment is connected.'};
+  return {label:'Shipping',amount:0,display:'Calculated later',ready:false,note:'Shipping pricing has not been finalized for this order yet.'};
+}
+
+function renderSummary(o){
+  if(!o)return;
+  const itemPrice=Number(o.counterAmount||o.amount||0);
+  const shipping=shippingSummary(o);
+  document.getElementById('item-title').textContent=o.listingTitle||'Your purchase';
+  document.getElementById('item-price').textContent=money(itemPrice);
+  document.getElementById('shipping-type-label').textContent=shipping.label;
+  document.getElementById('shipping-price').textContent=shipping.display;
+  document.getElementById('subtotal').textContent=shipping.ready?money(itemPrice+shipping.amount):money(itemPrice);
+  document.getElementById('summary-note').textContent=shipping.ready
+    ? `${shipping.note} Paws It On marketplace fees will be added once the fee structure is finalized.`
+    : `${shipping.note} The current total does not include that future shipping charge or marketplace fee.`;
+}
+
 function showPaymentState(o){if(!o)return;if(o.checkoutStage==='paid_test'||o.paymentStatus==='paid_test'){paymentBox.hidden=false;paymentBtn.disabled=true;paymentBtn.textContent='Test Payment Complete';paymentStatus.textContent='📣 Test payment successful. The seller can now prepare this order for shipping.';return;}if(o.shippingAddress||o.checkoutStage==='awaiting_payment'){paymentBox.hidden=false;paymentBtn.disabled=false;paymentBtn.textContent='Run Test Payment';paymentStatus.textContent='';}}
-onAuthStateChanged(auth,async user=>{if(!user){status.textContent='Please sign in to continue checkout.';button.disabled=true;return;}if(!offerId){status.textContent='This checkout link is missing its offer number.';button.disabled=true;return;}try{const snap=await getDoc(doc(db,'offers',offerId));if(!snap.exists())throw new Error('Offer not found');const o={id:snap.id,...snap.data()};if(o.buyerId!==user.uid||o.status!=='accepted'||o.fulfillmentMethod!=='shipping')throw new Error('Checkout is not available for this offer');currentOffer=o;const price=Number(o.counterAmount||o.amount||0);document.getElementById('item-title').textContent=o.listingTitle||'Your purchase';document.getElementById('item-price').textContent=money(price);document.getElementById('subtotal').textContent=money(price);if(o.shippingAddress){document.getElementById('ship-name').value=o.shippingAddress.fullName||'';document.getElementById('ship-street').value=o.shippingAddress.street||'';document.getElementById('ship-unit').value=o.shippingAddress.unit||'';document.getElementById('ship-city').value=o.shippingAddress.city||'';document.getElementById('ship-state').value=o.shippingAddress.state||'';document.getElementById('ship-zip').value=o.shippingAddress.zip||'';}showPaymentState(o);}catch(e){console.error(e);status.textContent='This shipping checkout is not available.';button.disabled=true;}});
+onAuthStateChanged(auth,async user=>{if(!user){status.textContent='Please sign in to continue checkout.';button.disabled=true;return;}if(!offerId){status.textContent='This checkout link is missing its offer number.';button.disabled=true;return;}try{const snap=await getDoc(doc(db,'offers',offerId));if(!snap.exists())throw new Error('Offer not found');const o={id:snap.id,...snap.data()};if(o.buyerId!==user.uid||o.status!=='accepted'||o.fulfillmentMethod!=='shipping')throw new Error('Checkout is not available for this offer');currentOffer=o;renderSummary(o);if(o.shippingAddress){document.getElementById('ship-name').value=o.shippingAddress.fullName||'';document.getElementById('ship-street').value=o.shippingAddress.street||'';document.getElementById('ship-unit').value=o.shippingAddress.unit||'';document.getElementById('ship-city').value=o.shippingAddress.city||'';document.getElementById('ship-state').value=o.shippingAddress.state||'';document.getElementById('ship-zip').value=o.shippingAddress.zip||'';}showPaymentState(o);}catch(e){console.error(e);status.textContent='This shipping checkout is not available.';button.disabled=true;}});
 form.addEventListener('submit',async e=>{e.preventDefault();const user=auth.currentUser;if(!user||!currentOffer)return;button.disabled=true;button.textContent='Saving…';status.textContent='';const address={fullName:document.getElementById('ship-name').value.trim(),street:document.getElementById('ship-street').value.trim(),unit:document.getElementById('ship-unit').value.trim(),city:document.getElementById('ship-city').value.trim(),state:document.getElementById('ship-state').value.trim().toUpperCase(),zip:document.getElementById('ship-zip').value.trim()};try{await updateDoc(doc(db,'offers',offerId),{shippingAddress:address,checkoutStage:'awaiting_payment',shippingAddressSavedAt:serverTimestamp(),updatedAt:serverTimestamp()});currentOffer={...currentOffer,shippingAddress:address,checkoutStage:'awaiting_payment'};status.textContent='🐾 Shipping address saved! Run the test payment below.';button.textContent='Shipping Saved';showPaymentState(currentOffer);}catch(err){console.error(err);status.textContent='Shipping could not be saved yet.';button.disabled=false;button.textContent='Save Shipping & Continue';}});
 paymentBtn.addEventListener('click',async()=>{const user=auth.currentUser;if(!user||!currentOffer||!currentOffer.shippingAddress)return;paymentBtn.disabled=true;paymentBtn.textContent='Processing Test Payment…';paymentStatus.textContent='';try{await updateDoc(doc(db,'offers',offerId),{paymentStatus:'paid_test',checkoutStage:'paid_test',testPaidAt:serverTimestamp(),updatedAt:serverTimestamp()});currentOffer={...currentOffer,paymentStatus:'paid_test',checkoutStage:'paid_test'};showPaymentState(currentOffer);}catch(err){console.error(err);paymentStatus.textContent='Test payment could not be recorded yet.';paymentBtn.disabled=false;paymentBtn.textContent='Run Test Payment';}});
