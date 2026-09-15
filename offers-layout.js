@@ -78,8 +78,11 @@ function compactRoot(root){
   [...grid.querySelectorAll(':scope > .offer-card')].forEach(transformCard);
 }
 
-function run(){roots.forEach(id=>compactRoot(document.getElementById(id)));}
+function reveal(){document.documentElement.classList.add('offers-ready');}
+function run(){roots.forEach(id=>compactRoot(document.getElementById(id)));reveal();}
 let timer;
-function schedule(){clearTimeout(timer);timer=setTimeout(run,100);}
+function schedule(){clearTimeout(timer);timer=setTimeout(run,80);}
 roots.forEach(id=>{const root=document.getElementById(id);if(root)new MutationObserver(schedule).observe(root,{childList:true,subtree:true});});
-setTimeout(run,500);
+setTimeout(run,350);
+// Safety: never leave the page hidden if Firebase is slow or unavailable.
+setTimeout(reveal,1800);
