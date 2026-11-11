@@ -2,7 +2,7 @@ import {auth,db} from './firebase.js';
 import {onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js';
 import {collection,addDoc,getDocs,query,orderBy,limit,serverTimestamp} from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 const feed=document.getElementById('paw-posts'),feedStatus=document.getElementById('paw-feed-status'),form=document.getElementById('paw-create-form'),status=document.getElementById('paw-create-status'),filter=document.getElementById('paw-filter');
-let user=null,posts=[];
+let user=null,posts=[];const initialCategory=new URLSearchParams(location.search).get('category');if(['question','review','tip'].includes(initialCategory))filter.value=initialCategory;
 const el=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;};
 const date=v=>v?.toDate?.()?.toLocaleDateString()||'Recently';
 const name=u=>(u?.displayName||u?.email?.split('@')[0]||'Community member').slice(0,60);
