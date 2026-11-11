@@ -44,9 +44,86 @@ photosInput?.addEventListener('change', () => {
   if (files.length) status.textContent = `${files.length} photo${files.length === 1 ? '' : 's'} selected. Large phone photos will be resized automatically when you publish.`;
 });
 
+
+const listingForm = document.getElementById('listing-form');
+function clearFieldErrors() {
+  listingForm?.querySelectorAll('.field-invalid').forEach(el => {
+    el.classList.remove('field-invalid');
+    el.removeAttribute('aria-invalid');
+  });
+  listingForm?.querySelectorAll('.field-error-message').forEach(el => el.remove());
+}
+function markField(id, message) {
+  const field = document.getElementById(id);
+  if (!field) return;
+  const target = field.type === 'file' ? field.closest('.photo-upload') || field : field;
+  target.classList.add('field-invalid');
+  field.setAttribute('aria-invalid', 'true');
+  const note = document.createElement('span');
+  note.className = 'field-error-message';
+  note.setAttribute('role', 'alert');
+  note.textContent = message;
+  const parent = field.closest('label') || field.parentElement;
+  parent.insertAdjacentElement('afterend', note);
+}
+listingForm?.addEventListener('input', event => {
+  const field = event.target;
+  if (field.classList.contains('field-invalid') || field.getAttribute('aria-invalid') === 'true') {
+    field.classList.remove('field-invalid');
+    field.removeAttribute('aria-invalid');
+    const note = (field.closest('label') || field.parentElement)?.nextElementSibling;
+    if (note?.classList.contains('field-error-message')) note.remove();
+  }
+});
+listingForm?.addEventListener('change', event => {
+  const field = event.target;
+  if (field.getAttribute('aria-invalid') === 'true') {
+    field.removeAttribute('aria-invalid');
+    field.classList.remove('field-invalid');
+    field.closest('.photo-upload')?.classList.remove('field-invalid');
+    const note = (field.closest('label') || field.parentElement)?.nextElementSibling;
+    if (note?.classList.contains('field-error-message')) note.remove();
+  }
+});
+function validateListingFields() {
+  clearFieldErrors();
+  const errors = [];
+  const requireField = (id, valid, message) => { if (!valid) errors.push([id, message]); };
+  const val = id => document.getElementById(id)?.value.trim() || '';
+  requireField('photos', !!photosInput?.files.length && photosInput.files.length <= MAX_PHOTOS, 'Add 1–8 item photos.');
+  requireField('item-title', !!val('item-title'), 'Enter an item title.');
+  requireField('category', !!val('category'), 'Choose a category.');
+  requireField('condition', !!val('condition'), 'Choose the item condition.');
+  requireField('description', !!val('description'), 'Describe the item.');
+  requireField('price', val('price') !== '' && Number(val('price')) > 0, 'Enter a price greater than $0.');
+  const shipping = !!shippingInput?.checked, pickup = !!document.getElementById('pickup')?.checked;
+  if (!shipping && !pickup) {
+    errors.push(['shipping', 'Select shipping or local pickup.']);
+    errors.push(['pickup', 'Select shipping or local pickup.']);
+  }
+  if (shipping) {
+    const type = val('shipping-type');
+    requireField('shipping-type', !!type, 'Choose a shipping method.');
+    if (type === 'flat') requireField('flat-shipping-price', val('flat-shipping-price') !== '' && Number(val('flat-shipping-price')) >= 0, 'Enter a valid shipping charge.');
+    if (type === 'calculated') for (const id of ['package-weight','package-length','package-width','package-height']) {
+      requireField(id, val(id) !== '' && Number(val(id)) > 0, 'Enter a value greater than zero.');
+    }
+  }
+  requireField('seller-certification', !!document.getElementById('seller-certification')?.checked, 'Confirm the seller certification.');
+  for (const [id, message] of errors) markField(id, message);
+  if (errors.length) {
+    const first = document.getElementById(errors[0][0]);
+    (first?.closest('.photo-upload') || first)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    first?.focus({ preventScroll: true });
+  }
+  return errors.length;
+}
+
 document.getElementById('publish-listing')?.addEventListener('click', async () => {
   const status = document.getElementById('listing-status');
-  if (!currentUser) { status.textContent = 'Please sign in first.'; return; }
+  if (!currentUser) { status.innerHTML = 'Please <a href="account.html">sign in or create an account</a> first.'; return; }
+  const errorCount = validateListingFields();
+  if (errorCount) { status.textContent = `Please complete the ${errorCount} highlighted field${errorCount === 1 ? '' : 's'} before publishing.`; return; }
 
   const title = document.getElementById('item-title').value.trim();
   const category = document.getElementById('category').value;
