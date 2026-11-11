@@ -3,3 +3,9 @@
 .account-nav-menu.signed-out .account-dropdown{display:none!important}
 .account-nav-menu.signed-out .account-nav-trigger{background:var(--yellow);color:var(--navy);padding:10px 14px;border-radius:10px}
 .account-nav-menu.signed-out .account-nav-trigger:after{content:none}
+
+/* Make every Paw Talk homepage entry clickable */
+.pawtalk-card-link{display:block;text-decoration:none;color:inherit;cursor:pointer}
+.pawtalk-card-link:hover,.pawtalk-card-link:focus-visible{transform:translateY(-3px);box-shadow:0 12px 28px rgba(18,57,91,.18)}
+.pawtalk-heading-link{color:inherit;text-decoration:none}
+.pawtalk-heading-link:hover,.pawtalk-heading-link:focus-visible{text-decoration:underline}
