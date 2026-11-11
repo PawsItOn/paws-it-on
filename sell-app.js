@@ -33,15 +33,55 @@ shippingInput?.addEventListener('change', refreshShippingFields);
 shippingType?.addEventListener('change', refreshShippingFields);
 refreshShippingFields();
 
+const previewContainer = document.getElementById('photo-preview');
+let selectedPhotoFiles = [];
+let previewUrls = [];
+function renderPhotoPreviews() {
+  previewUrls.forEach(url => URL.revokeObjectURL(url));
+  previewUrls = [];
+  if (!previewContainer) return;
+  previewContainer.replaceChildren();
+  selectedPhotoFiles.forEach((file, index) => {
+    const tile = document.createElement('div');
+    tile.className = 'photo-preview-tile';
+    const img = document.createElement('img');
+    const url = URL.createObjectURL(file);
+    previewUrls.push(url);
+    img.src = url;
+    img.alt = 'Selected photo ' + (index + 1);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'photo-preview-remove';
+    remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', 'Remove photo ' + (index + 1));
+    remove.addEventListener('click', () => {
+      selectedPhotoFiles.splice(index, 1);
+      syncPhotoInput();
+      renderPhotoPreviews();
+      document.getElementById('listing-status').textContent = selectedPhotoFiles.length + ' photo(s) selected.';
+    });
+    tile.append(img, remove);
+    previewContainer.appendChild(tile);
+  });
+}
+function syncPhotoInput() {
+  const transfer = new DataTransfer();
+  selectedPhotoFiles.forEach(file => transfer.items.add(file));
+  photosInput.files = transfer.files;
+}
 photosInput?.addEventListener('change', () => {
   const status = document.getElementById('listing-status');
   const files = [...photosInput.files];
   if (files.length > MAX_PHOTOS) {
     photosInput.value = '';
+    selectedPhotoFiles = [];
+    renderPhotoPreviews();
     status.textContent = `Please choose no more than ${MAX_PHOTOS} photos.`;
     return;
   }
-  if (files.length) status.textContent = `${files.length} photo${files.length === 1 ? '' : 's'} selected. Large phone photos will be resized automatically when you publish.`;
+  selectedPhotoFiles = files;
+  renderPhotoPreviews();
+  if (files.length) status.textContent = `${files.length} photo${files.length === 1 ? '' : 's'} selected. Review or remove photos above before publishing.`;
 });
 
 
@@ -202,6 +242,8 @@ document.getElementById('publish-listing')?.addEventListener('click', async () =
     });
     status.innerHTML = 'Listing and photos published! <a href="shop.html#listings">View it in the Shop →</a>';
     photosInput.value = '';
+    selectedPhotoFiles = [];
+    renderPhotoPreviews();
   } catch (e) {
     console.error(e);
     status.textContent = `Photo/listing upload failed: ${friendlyStorageError(e)}`;
