@@ -1,8 +1,8 @@
 import { auth, db, storage } from './firebase.js';
 import { prepareListingPhotos } from './image-utils.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js';
-import { collection, doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
-import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-storage.js';
+import { collection, doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
+import { ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-storage.js';
 
 const MAX_PHOTOS = 8;
 let currentUser = null;
@@ -192,7 +192,13 @@ document.getElementById('publish-listing')?.addEventListener('click', async () =
   if (!selectedFiles.length) { status.textContent = 'Please add at least one real photo of the item.'; return; }
   if (selectedFiles.length > MAX_PHOTOS) { status.textContent = `Please choose no more than ${MAX_PHOTOS} photos.`; return; }
 
+  const publishButton = document.getElementById('publish-listing');
+  if (publishButton.disabled) return;
+  publishButton.disabled = true;
   try {
+    status.textContent = 'Checking member agreement…';
+    const member = await getDoc(doc(db,'profiles',currentUser.uid));
+    if(member.data()?.agreementVersion !== '2026-11-v1'){status.innerHTML='Please <a href="account.html">accept the one-time member agreement</a> before publishing.';return;}
     status.textContent = 'Preparing photos…';
     const files = await prepareListingPhotos(selectedFiles);
     const listingRef = doc(collection(db, 'listings'));
@@ -205,7 +211,7 @@ document.getElementById('publish-listing')?.addEventListener('click', async () =
       const safeName = (file.name || `photo-${i}.jpg`).replace(/[^a-zA-Z0-9._-]/g, '_');
       const path = `listing-images/${currentUser.uid}/${listingRef.id}/${Date.now()}-${i}-${safeName}`;
       const storageRef = ref(storage, path);
-      await uploadBytes(storageRef, file, { contentType: file.type || 'image/jpeg' });
+      await new Promise((resolve,reject)=>{const task=uploadBytesResumable(storageRef,file,{contentType:file.type||'image/jpeg'});task.on('state_changed',snap=>{status.textContent='Uploading photo '+(i+1)+' of '+files.length+' — '+Math.round(100*snap.bytesTransferred/Math.max(1,snap.totalBytes))+'%';},reject,resolve);});
       imageUrls.push(await getDownloadURL(storageRef));
       imagePaths.push(path);
       status.textContent = `Uploaded ${i + 1} of ${files.length} photos…`;
@@ -247,7 +253,7 @@ document.getElementById('publish-listing')?.addEventListener('click', async () =
   } catch (e) {
     console.error(e);
     status.textContent = `Photo/listing upload failed: ${friendlyStorageError(e)}`;
-  }
+  } finally { publishButton.disabled = false; }
 });
 
 function friendlyStorageError(e) {
@@ -255,7 +261,7 @@ function friendlyStorageError(e) {
   if (e?.message === 'not-image') return 'one of the selected files is not an image.';
   const code = e?.code || '';
   if (code.includes('unauthorized')) return 'Firebase Storage did not allow the upload. Please make sure you are signed in and the Storage rules are published.';
-  if (code.includes('quota')) return 'Storage quota was reached.';
+  if (code.includes('quota')) return 'Photo storage is currently unavailable. Please try again later.';
   if (code.includes('canceled')) return 'Upload was canceled.';
   return 'please try again. If it keeps happening, we will check Firebase together.';
 }
